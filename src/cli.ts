@@ -32,7 +32,7 @@ program
   .version('1.0.0');
 
 // Nova função auxiliar para checar Ollama
-async function checkOllamaSetup(model: string = 'gemma:2b') {
+async function checkOllamaSetup(model: string = 'qwen2.5:1.5b') {
     const spinner = ora({
         text: chalk.green('Verificando conexão com o Ollama...'),
         color: 'green'
@@ -99,8 +99,8 @@ program
     // Limpa a tela, configura a margem de rolagem e desenha o rodapé inicial
     console.clear();
     
-    // Auto-setup mágico para o Gemma 2B
-    await checkOllamaSetup('gemma:2b');
+    // Auto-setup mágico para um modelo minúsculo (1.5B) que suporte Tool Calling
+    await checkOllamaSetup('qwen2.5:1.5b');
     
     console.log(chalk.greenBright('\nWake up, neo...'));
     const orchestrator = new Orchestrator();

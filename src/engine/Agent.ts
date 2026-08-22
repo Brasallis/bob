@@ -24,7 +24,7 @@ export class Agent {
     constructor(config: AgentConfig) {
         this.name = config.name;
         this.systemPrompt = config.systemPrompt;
-        this.model = config.model || process.env.OLLAMA_MODEL || 'gemma:2b';
+        this.model = config.model || process.env.OLLAMA_MODEL || 'qwen2.5:1.5b';
         
         // Inicializa a memória com o system prompt
         this.memory.push({ role: 'system', content: this.systemPrompt });
