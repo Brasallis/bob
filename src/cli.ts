@@ -105,6 +105,18 @@ program
     console.log(chalk.greenBright('\nWake up, neo...'));
     const orchestrator = new Orchestrator();
 
+    const mcpSpinner = ora({
+        text: chalk.green('Inicializando Model Context Protocol e conectando ao sistema de arquivos...'),
+        color: 'green'
+    }).start();
+
+    try {
+        await orchestrator.initMCP(process.cwd());
+        mcpSpinner.succeed(chalk.green('Conectado ao MCP FileSystem com sucesso! O Bob agora tem visão do seu projeto.'));
+    } catch (e: any) {
+        mcpSpinner.fail(chalk.red(`Falha ao conectar MCP: ${e.message}`));
+    }
+
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout
@@ -117,6 +129,7 @@ program
         const input = line.trim();
         if (input.toLowerCase() === 'exit' || input.toLowerCase() === 'quit' || input.toLowerCase() === '/exit') {
             console.log(chalk.green('>>> Disconnecting...'));
+            await orchestrator.stop();
             process.exit(0);
         }
 
@@ -156,8 +169,9 @@ program
             console.log();
         }
         rl.prompt();
-    }).on('close', () => {
+    }).on('close', async () => {
         console.log(chalk.green('\n>>> Connection terminated.'));
+        await orchestrator.stop();
         process.exit(0);
     });
   });
