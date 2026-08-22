@@ -1,4 +1,4 @@
-import { OpenAI } from 'openai';
+import http from 'http';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -8,74 +8,97 @@ export interface AgentConfig {
     model?: string;
 }
 
+const OLLAMA_HOST = 'localhost';
+const OLLAMA_PORT = 11434;
+
 export class Agent {
     public name: string;
     public systemPrompt: string;
     public model: string;
-    protected client: OpenAI;
-    protected memory: any[] = [];
+    protected memory: { role: string, content: string }[] = [];
 
     constructor(config: AgentConfig) {
         this.name = config.name;
         this.systemPrompt = config.systemPrompt;
         this.model = config.model || process.env.OLLAMA_MODEL || 'gemma:2b';
         
-        this.client = new OpenAI({
-            baseURL: process.env.OLLAMA_API_URL || 'http://localhost:11434/v1',
-            apiKey: process.env.OLLAMA_API_KEY || 'ollama',
-        });
-
         // Inicializa a memória com o system prompt
         this.memory.push({ role: 'system', content: this.systemPrompt });
     }
 
-    async run(task: string, onChunk?: (text: string) => void): Promise<{text: string, usage?: any, model: string}> {
-        this.memory.push({ role: 'user', content: task });
-        
-        try {
-            const stream = await this.client.chat.completions.create({
+    run(task: string, onChunk?: (text: string) => void): Promise<{text: string, usage?: any, model: string}> {
+        return new Promise((resolve) => {
+            this.memory.push({ role: 'user', content: task });
+
+            const data = JSON.stringify({
                 model: this.model,
                 messages: this.memory,
-                stream: true,
-                stream_options: { include_usage: true }
+                stream: true
             });
 
-            let fullReply = '';
-            let finalUsage: any = undefined;
-            let finalModel = this.model;
-
-            for await (const chunk of stream) {
-                const text = chunk.choices[0]?.delta?.content || "";
-                if (text) {
-                    fullReply += text;
-                    if (onChunk) onChunk(text);
+            const req = http.request({
+                hostname: OLLAMA_HOST,
+                port: OLLAMA_PORT,
+                path: '/api/chat',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(data)
                 }
-                
-                if (chunk.usage) {
-                    finalUsage = chunk.usage;
+            }, (res) => {
+                if (res.statusCode !== 200) {
+                    console.error(`\n[${this.name}] Ollama retornou erro HTTP: ${res.statusCode}`);
+                    resolve({ text: "Erro na API do Ollama.", model: this.model });
+                    return;
                 }
-                
-                if (chunk.model) {
-                    finalModel = chunk.model;
-                }
-            }
 
-            if (!fullReply) {
-                fullReply = "Sem resposta gerada.";
-            }
+                let fullReply = '';
+                let finalUsage: any = undefined;
 
-            this.memory.push({ role: 'assistant', content: fullReply });
-            return {
-                text: fullReply,
-                usage: finalUsage,
-                model: finalModel
-            };
-        } catch (error: any) {
-            console.error(`\n[${this.name}] Erro ao comunicar com o modelo local (${this.model}): ${error.message}`);
-            return {
-                text: "Erro ao processar a tarefa.",
-                model: this.model
-            };
-        }
+                res.on('data', (chunk) => {
+                    const lines = chunk.toString().split('\n');
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+                        try {
+                            const parsed = JSON.parse(line);
+                            
+                            if (parsed.message?.content) {
+                                fullReply += parsed.message.content;
+                                if (onChunk) onChunk(parsed.message.content);
+                            }
+
+                            if (parsed.done) {
+                                finalUsage = {
+                                    prompt_tokens: parsed.prompt_eval_count || 0,
+                                    completion_tokens: parsed.eval_count || 0
+                                };
+                            }
+                        } catch (e) {
+                            // ignora erros de parse parcial
+                        }
+                    }
+                });
+
+                res.on('end', () => {
+                    if (!fullReply) {
+                        fullReply = "Sem resposta gerada.";
+                    }
+                    this.memory.push({ role: 'assistant', content: fullReply });
+                    resolve({
+                        text: fullReply,
+                        usage: finalUsage,
+                        model: this.model
+                    });
+                });
+            });
+
+            req.on('error', (error: any) => {
+                console.error(`\n[${this.name}] Erro crítico de conexão com o motor local: ${error.message}`);
+                resolve({ text: "O motor Ollama falhou ou perdeu conexão.", model: this.model });
+            });
+
+            req.write(data);
+            req.end();
+        });
     }
 }
