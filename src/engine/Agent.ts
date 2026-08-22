@@ -47,8 +47,12 @@ export class Agent {
                 }
             }, (res) => {
                 if (res.statusCode !== 200) {
-                    console.error(`\n[${this.name}] Ollama retornou erro HTTP: ${res.statusCode}`);
-                    resolve({ text: "Erro na API do Ollama.", model: this.model });
+                    let errorBody = '';
+                    res.on('data', chunk => { errorBody += chunk.toString(); });
+                    res.on('end', () => {
+                        console.error(`\n[${this.name}] Ollama retornou erro HTTP ${res.statusCode}: ${errorBody}`);
+                        resolve({ text: "Erro interno do Ollama (veja o terminal).", model: this.model });
+                    });
                     return;
                 }
 
