@@ -29,7 +29,7 @@ export class Agent {
         this.memory.push({ role: 'system', content: this.systemPrompt });
     }
 
-    async run(task: string): Promise<string> {
+    async run(task: string): Promise<{text: string, usage?: any, model: string}> {
         this.memory.push({ role: 'user', content: task });
         
         try {
@@ -40,10 +40,17 @@ export class Agent {
 
             const reply = response.choices[0]?.message?.content || "Sem resposta gerada.";
             this.memory.push({ role: 'assistant', content: reply });
-            return reply;
+            return {
+                text: reply,
+                usage: response.usage,
+                model: response.model || this.model
+            };
         } catch (error: any) {
             console.error(`[${this.name}] Erro ao comunicar com o modelo local (${this.model}): ${error.message}`);
-            return "Erro ao processar a tarefa.";
+            return {
+                text: "Erro ao processar a tarefa.",
+                model: this.model
+            };
         }
     }
 }

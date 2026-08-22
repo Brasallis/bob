@@ -112,15 +112,33 @@ program
 
     rl.on('line', async (line) => {
         const input = line.trim();
-        if (input.toLowerCase() === 'exit' || input.toLowerCase() === 'quit') {
+        if (input.toLowerCase() === 'exit' || input.toLowerCase() === 'quit' || input.toLowerCase() === '/exit') {
             console.log(chalk.green('>>> Disconnecting...'));
             process.exit(0);
         }
 
+        if (input.toLowerCase() === '/clear') {
+            console.clear();
+            rl.prompt();
+            return;
+        }
+
         if (input) {
-            process.stdout.write(chalk.green('... \r')); // simple loading indicator
+            // Remove o prompt sujo
+            readline.cursorTo(process.stdout, 0);
+            
+            const spin = ora({ text: chalk.green('Bob is thinking...'), color: 'green' }).start();
+            
             const response = await orchestrator.chat(input);
-            console.log(chalk.green(response));
+            
+            spin.stop();
+            readline.clearLine(process.stdout, 0);
+            readline.cursorTo(process.stdout, 0);
+
+            console.log(chalk.green(response.text));
+            
+            console.log(chalk.gray(`\n[ Model: ${response.model} | Tokens: ${response.usage?.prompt_tokens || 0} in, ${response.usage?.completion_tokens || 0} out ]`));
+            console.log(chalk.gray(`[ Commands: /clear | /exit ]\n`));
         }
         rl.prompt();
     }).on('close', () => {
@@ -137,7 +155,7 @@ program
     console.log(chalk.green(`>>> Executing task: ${task}`));
     const orchestrator = new Orchestrator();
     const response = await orchestrator.chat(task);
-    console.log(chalk.green(response));
+    console.log(chalk.green(response.text));
   });
 
 program
