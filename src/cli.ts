@@ -107,60 +107,33 @@ program
         output: process.stdout
     });
 
-    let lastModel = 'llama3';
-    let lastTokensIn = 0;
-    let lastTokensOut = 0;
+    let currentModel = orchestrator.model;
+    let currentTokensIn = 0;
+    let currentTokensOut = 0;
 
-    const setupScrollRegion = () => {
-        const rows = process.stdout.rows || 24;
-        process.stdout.write(`\x1b[1;${rows - 1}r`);
+    const updatePrompt = () => {
+        // Criamos um bloco multilinhas estilizado.
+        // O readline sempre ancorará o último '\n' na linha de digitação real.
+        const header = chalk.gray(`\n╭─── Metadados ──────────────────────────────────────────╮`);
+        const info = chalk.gray(`│ `) + chalk.cyan(`Model: `) + chalk.white(currentModel.padEnd(15)) + chalk.gray(`│ `) + chalk.cyan(`Tokens: `) + chalk.white(`${currentTokensIn} in, ${currentTokensOut} out`.padEnd(19)) + chalk.gray(`│`);
+        const cmds = chalk.gray(`│ `) + chalk.yellow(`Cmds: `) + chalk.white(`/clear | /model <name> | /exit`.padEnd(40)) + chalk.gray(`│`);
+        const footer = chalk.gray(`╰────────────────────────────────────────────────────────╯\n`);
+        
+        rl.setPrompt(`${header}\n${info}\n${cmds}\n${footer}${chalk.greenBright('bob> ')}`);
     };
 
-    const drawFooter = (model: string, tokensIn: number, tokensOut: number) => {
-        lastModel = model;
-        lastTokensIn = tokensIn;
-        lastTokensOut = tokensOut;
-        
-        const rows = process.stdout.rows || 24;
-        const cols = process.stdout.columns || 80;
-        
-        process.stdout.write('\x1b[s'); // Save cursor
-        process.stdout.write(`\x1b[${rows};1H`); // Move to bottom
-        
-        const footerText = ` [ Model: ${model} | Tokens: ${tokensIn} in, ${tokensOut} out ] [ Commands: /clear | /model <name> | /exit ] `;
-        process.stdout.write(chalk.bgGreen.black(footerText.padEnd(cols, ' ')));
-        
-        process.stdout.write('\x1b[u'); // Restore cursor
-    };
-
-    const resetScrollRegion = () => {
-        const rows = process.stdout.rows || 24;
-        process.stdout.write(`\x1b[1;${rows}r`);
-    };
-
-    process.stdout.on('resize', () => {
-        setupScrollRegion();
-        drawFooter(lastModel, lastTokensIn, lastTokensOut);
-    });
-
-    // Limpa a tela, configura a margem de rolagem e desenha o rodapé inicial
-    console.clear();
-    setupScrollRegion();
-    drawFooter('llama3', 0, 0);
-    
+    updatePrompt();
     rl.prompt();
 
     rl.on('line', async (line) => {
         const input = line.trim();
         if (input.toLowerCase() === 'exit' || input.toLowerCase() === 'quit' || input.toLowerCase() === '/exit') {
-            resetScrollRegion();
             console.log(chalk.green('>>> Disconnecting...'));
             process.exit(0);
         }
 
         if (input.toLowerCase() === '/clear') {
             console.clear();
-            drawFooter(lastModel, lastTokensIn, lastTokensOut);
             rl.prompt();
             return;
         }
@@ -169,32 +142,39 @@ program
             const newModel = input.substring(7).trim();
             if (newModel) {
                 orchestrator.model = newModel;
+                currentModel = newModel;
                 console.log(chalk.cyan(`>>> Motor de inferência alterado para: ${newModel}`));
-                drawFooter(newModel, 0, 0);
+                updatePrompt();
             }
             rl.prompt();
             return;
         }
 
         if (input) {
+            // Limpa completamente a linha onde o usuário digitou e o prompt anterior para evitar sujeira
+            readline.clearLine(process.stdout, 0);
             readline.cursorTo(process.stdout, 0);
+            
+            // Prefixo da resposta do Bob
             process.stdout.write(chalk.greenBright('[Bob] '));
             
             const response = await orchestrator.chat(input, (text) => {
+                // Imprime a chunk em tempo real
                 process.stdout.write(chalk.green(text));
             });
             
+            // Pula uma linha no final da resposta
             console.log();
 
-            drawFooter(
-                response.model, 
-                response.usage?.prompt_tokens || 0, 
-                response.usage?.completion_tokens || 0
-            );
+            // Atualiza os metadados com base na resposta
+            currentModel = response.model || currentModel;
+            currentTokensIn = response.usage?.prompt_tokens || 0;
+            currentTokensOut = response.usage?.completion_tokens || 0;
+            
+            updatePrompt();
         }
         rl.prompt();
     }).on('close', () => {
-        resetScrollRegion();
         console.log(chalk.green('\n>>> Connection terminated.'));
         process.exit(0);
     });
