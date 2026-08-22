@@ -38,29 +38,55 @@ async function checkOllamaSetup(model: string = 'llama3') {
         color: 'green'
     }).start();
 
-    const isRunning = await OllamaManager.ping();
-    if (!isRunning) {
-        spinner.fail(chalk.red('Falha ao conectar com o Ollama.'));
-        console.log(chalk.yellow('\nOllama não está rodando ou não está instalado.'));
-        console.log(chalk.gray('-> Para instalar: https://ollama.com/download'));
-        console.log(chalk.gray('-> Se já está instalado, abra o aplicativo do Ollama e tente novamente.\n'));
-        process.exit(1);
-    }
-    spinner.succeed(chalk.green('Ollama conectado com sucesso.'));
-
-    spinner.start(chalk.green(`Verificando modelo local (${model})...`));
-    const hasModel = await OllamaManager.hasModel(model);
+    let isRunning = await OllamaManager.ping();
     
-    if (!hasModel) {
-        spinner.warn(chalk.yellow(`Modelo ${model} não encontrado localmente.`));
-        try {
-            await OllamaManager.pullModel(model);
-        } catch (error: any) {
-            console.error(chalk.red(`\nErro ao baixar o modelo: ${error.message}`));
-            process.exit(1);
+    if (!isRunning) {
+        spinner.warn(chalk.yellow('Ollama não está rodando. Verificando instalação...'));
+        
+        const isInstalled = OllamaManager.isInstalled();
+        if (!isInstalled) {
+            console.log(chalk.red('>>> Ollama não está instalado no seu sistema.'));
+            // No Windows, tentamos baixar o instalador
+            try {
+                await OllamaManager.installOllamaWindows();
+                // Depois da instalação, avisa para rodar o comando novamente
+                console.log(chalk.green('>>> Por favor, reinicie seu terminal após a instalação e rode "bob" novamente.'));
+                process.exit(0);
+            } catch (err: any) {
+                console.log(chalk.red('Falha ao instalar automaticamente: ' + err.message));
+                console.log(chalk.gray('-> Para instalar manualmente: https://ollama.com/download'));
+                process.exit(1);
+            }
+        } else {
+            // Está instalado mas não rodando
+            try {
+                await OllamaManager.startOllama();
+                isRunning = true;
+                spinner.succeed(chalk.green('Ollama iniciado com sucesso em background.'));
+            } catch (e: any) {
+                spinner.fail(chalk.red('Não foi possível iniciar o Ollama: ' + e.message));
+                process.exit(1);
+            }
         }
     } else {
-        spinner.succeed(chalk.green(`Modelo ${model} está pronto para uso.`));
+        spinner.succeed(chalk.green('Ollama conectado com sucesso.'));
+    }
+
+    if (isRunning) {
+        spinner.start(chalk.green(`Verificando modelo local (${model})...`));
+        const hasModel = await OllamaManager.hasModel(model);
+        
+        if (!hasModel) {
+            spinner.warn(chalk.yellow(`Modelo ${model} não encontrado localmente.`));
+            try {
+                await OllamaManager.pullModel(model);
+            } catch (error: any) {
+                console.error(chalk.red(`\nErro ao baixar o modelo: ${error.message}`));
+                process.exit(1);
+            }
+        } else {
+            spinner.succeed(chalk.green(`Modelo ${model} está pronto para uso.`));
+        }
     }
 }
 
