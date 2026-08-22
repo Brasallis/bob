@@ -107,24 +107,60 @@ program
         output: process.stdout
     });
 
-    const updatePrompt = (model: string, tokensIn: number, tokensOut: number) => {
-        const footer = chalk.gray(`\n[ Model: ${model} | Tokens: ${tokensIn} in, ${tokensOut} out ]\n[ Commands: /clear | /model <name> | /exit ]\n`);
-        rl.setPrompt(footer + chalk.greenBright('bob> '));
+    let lastModel = 'llama3';
+    let lastTokensIn = 0;
+    let lastTokensOut = 0;
+
+    const setupScrollRegion = () => {
+        const rows = process.stdout.rows || 24;
+        process.stdout.write(`\x1b[1;${rows - 1}r`);
     };
 
-    // Initial prompt setup
-    updatePrompt('llama3', 0, 0);
+    const drawFooter = (model: string, tokensIn: number, tokensOut: number) => {
+        lastModel = model;
+        lastTokensIn = tokensIn;
+        lastTokensOut = tokensOut;
+        
+        const rows = process.stdout.rows || 24;
+        const cols = process.stdout.columns || 80;
+        
+        process.stdout.write('\x1b[s'); // Save cursor
+        process.stdout.write(`\x1b[${rows};1H`); // Move to bottom
+        
+        const footerText = ` [ Model: ${model} | Tokens: ${tokensIn} in, ${tokensOut} out ] [ Commands: /clear | /model <name> | /exit ] `;
+        process.stdout.write(chalk.bgGreen.black(footerText.padEnd(cols, ' ')));
+        
+        process.stdout.write('\x1b[u'); // Restore cursor
+    };
+
+    const resetScrollRegion = () => {
+        const rows = process.stdout.rows || 24;
+        process.stdout.write(`\x1b[1;${rows}r`);
+    };
+
+    process.stdout.on('resize', () => {
+        setupScrollRegion();
+        drawFooter(lastModel, lastTokensIn, lastTokensOut);
+    });
+
+    // Limpa a tela, configura a margem de rolagem e desenha o rodapé inicial
+    console.clear();
+    setupScrollRegion();
+    drawFooter('llama3', 0, 0);
+    
     rl.prompt();
 
     rl.on('line', async (line) => {
         const input = line.trim();
         if (input.toLowerCase() === 'exit' || input.toLowerCase() === 'quit' || input.toLowerCase() === '/exit') {
+            resetScrollRegion();
             console.log(chalk.green('>>> Disconnecting...'));
             process.exit(0);
         }
 
         if (input.toLowerCase() === '/clear') {
             console.clear();
+            drawFooter(lastModel, lastTokensIn, lastTokensOut);
             rl.prompt();
             return;
         }
@@ -134,29 +170,23 @@ program
             if (newModel) {
                 orchestrator.model = newModel;
                 console.log(chalk.cyan(`>>> Motor de inferência alterado para: ${newModel}`));
-                updatePrompt(newModel, 0, 0);
+                drawFooter(newModel, 0, 0);
             }
             rl.prompt();
             return;
         }
 
         if (input) {
-            // Remove o prompt sujo
             readline.cursorTo(process.stdout, 0);
-            
-            // Prefixo da resposta do Bob
             process.stdout.write(chalk.greenBright('[Bob] '));
             
             const response = await orchestrator.chat(input, (text) => {
-                // Imprime a chunk em tempo real
                 process.stdout.write(chalk.green(text));
             });
             
-            // Pula uma linha no final da resposta
             console.log();
 
-            // Atualiza o prompt fixo com os metadados reais
-            updatePrompt(
+            drawFooter(
                 response.model, 
                 response.usage?.prompt_tokens || 0, 
                 response.usage?.completion_tokens || 0
@@ -164,6 +194,7 @@ program
         }
         rl.prompt();
     }).on('close', () => {
+        resetScrollRegion();
         console.log(chalk.green('\n>>> Connection terminated.'));
         process.exit(0);
     });
