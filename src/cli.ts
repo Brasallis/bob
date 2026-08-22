@@ -110,22 +110,7 @@ program
         output: process.stdout
     });
 
-    let currentModel = orchestrator.model || 'gemma:2b';
-    let currentTokensIn = 0;
-    let currentTokensOut = 0;
-
-    const updatePrompt = () => {
-        // Criamos um bloco multilinhas estilizado.
-        // O readline sempre ancorará o último '\n' na linha de digitação real.
-        const header = chalk.gray(`\n╭─── Metadados ──────────────────────────────────────────╮`);
-        const info = chalk.gray(`│ `) + chalk.cyan(`Model: `) + chalk.white(currentModel.padEnd(15)) + chalk.gray(`│ `) + chalk.cyan(`Tokens: `) + chalk.white(`${currentTokensIn} in, ${currentTokensOut} out`.padEnd(19)) + chalk.gray(`│`);
-        const cmds = chalk.gray(`│ `) + chalk.yellow(`Cmds: `) + chalk.white(`/clear | /model <name> | /exit`.padEnd(40)) + chalk.gray(`│`);
-        const footer = chalk.gray(`╰────────────────────────────────────────────────────────╯\n`);
-        
-        rl.setPrompt(`${header}\n${info}\n${cmds}\n${footer}${chalk.greenBright('bob> ')}`);
-    };
-
-    updatePrompt();
+    rl.setPrompt(chalk.greenBright('bob> '));
     rl.prompt();
 
     rl.on('line', async (line) => {
@@ -145,9 +130,7 @@ program
             const newModel = input.substring(7).trim();
             if (newModel) {
                 orchestrator.model = newModel;
-                currentModel = newModel;
                 console.log(chalk.cyan(`>>> Motor de inferência alterado para: ${newModel}`));
-                updatePrompt();
             }
             rl.prompt();
             return;
@@ -169,12 +152,8 @@ program
             // Pula uma linha no final da resposta
             console.log();
 
-            // Atualiza os metadados com base na resposta
-            currentModel = response.model || currentModel;
-            currentTokensIn = response.usage?.prompt_tokens || 0;
-            currentTokensOut = response.usage?.completion_tokens || 0;
-            
-            updatePrompt();
+            // Pula uma linha no final da resposta
+            console.log();
         }
         rl.prompt();
     }).on('close', () => {
