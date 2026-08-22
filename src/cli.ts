@@ -3,6 +3,8 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import figlet from 'figlet';
+import readline from 'readline';
+import { Orchestrator } from './engine/Orchestrator';
 
 // Mostra o nome BOB em fonte 2D, verde Matrix
 console.clear();
@@ -32,14 +34,43 @@ program
   .description('Inicia o REPL iterativo com o orquestrador')
   .action(async () => {
     console.log(chalk.greenBright('Wake up, neo...'));
-    console.log(chalk.green('Starting interactive mode. (Em breve)'));
+    const orchestrator = new Orchestrator();
+
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        prompt: chalk.greenBright('bob> ')
+    });
+
+    rl.prompt();
+
+    rl.on('line', async (line) => {
+        const input = line.trim();
+        if (input.toLowerCase() === 'exit' || input.toLowerCase() === 'quit') {
+            console.log(chalk.green('>>> Disconnecting...'));
+            process.exit(0);
+        }
+
+        if (input) {
+            process.stdout.write(chalk.green('... \r')); // simple loading indicator
+            const response = await orchestrator.chat(input);
+            console.log(chalk.green(response));
+        }
+        rl.prompt();
+    }).on('close', () => {
+        console.log(chalk.green('\n>>> Connection terminated.'));
+        process.exit(0);
+    });
   });
 
 program
   .command('run <task>')
   .description('Executa uma tarefa diretamente')
-  .action((task) => {
+  .action(async (task) => {
     console.log(chalk.green(`>>> Executing task: ${task}`));
+    const orchestrator = new Orchestrator();
+    const response = await orchestrator.chat(task);
+    console.log(chalk.green(response));
   });
 
 program.parse(process.argv);
