@@ -1,0 +1,31 @@
+{
+  "name": "hermess",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "bin": {
+    "bob": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@types/node": "^26.1.2",
+    "chalk": "^4.1.2",
+    "commander": "^15.0.0",
+    "dotenv": "^17.4.2",
+    "figlet": "^1.11.4",
+    "openai": "^7.3.0",
+    "tsx": "^4.23.4",
+    "typescript": "^7.0.2"
+  },
+  "devDependencies": {
+    "@types/figlet": "^1.7.0"
+  }
+}
