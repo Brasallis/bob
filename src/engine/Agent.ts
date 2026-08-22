@@ -18,7 +18,7 @@ export class Agent {
     constructor(config: AgentConfig) {
         this.name = config.name;
         this.systemPrompt = config.systemPrompt;
-        this.model = config.model || process.env.OLLAMA_MODEL || 'llama3';
+        this.model = config.model || process.env.OLLAMA_MODEL || 'gemma:2b';
         
         this.client = new OpenAI({
             baseURL: process.env.OLLAMA_API_URL || 'http://localhost:11434/v1',
