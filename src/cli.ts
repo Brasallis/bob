@@ -30,7 +30,7 @@ program
   .version('1.0.0');
 
 program
-  .command('chat')
+  .command('chat', { isDefault: true })
   .description('Inicia o REPL iterativo com o orquestrador')
   .action(async () => {
     console.log(chalk.greenBright('Wake up, neo...'));
