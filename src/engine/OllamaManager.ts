@@ -1,10 +1,11 @@
 import { spawn, execSync } from 'child_process';
 import chalk from 'chalk';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
+import http from 'http';
+import readline from 'readline';
 
-const OLLAMA_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434';
+const OLLAMA_HOST = 'localhost';
+const OLLAMA_PORT = 11434;
+const OLLAMA_URL = process.env.OLLAMA_API_URL || `http://${OLLAMA_HOST}:${OLLAMA_PORT}`;
 
 export class OllamaManager {
     /**
@@ -13,10 +14,7 @@ export class OllamaManager {
     static async ping(): Promise<boolean> {
         try {
             const response = await fetch(`${OLLAMA_URL}/api/version`);
-            if (response.ok) {
-                return true;
-            }
-            return false;
+            return response.ok;
         } catch (error) {
             return false;
         }
@@ -40,7 +38,6 @@ export class OllamaManager {
     static startOllama(): Promise<void> {
         return new Promise((resolve, reject) => {
             console.log(chalk.gray('>>> Tentando iniciar o serviço do Ollama em background...'));
-            // Usamos detached para que o processo do Ollama continue mesmo se o CLI fechar
             const ollamaProcess = spawn('ollama', ['serve'], {
                 detached: true,
                 stdio: 'ignore',
@@ -49,7 +46,6 @@ export class OllamaManager {
             
             ollamaProcess.unref();
 
-            // Aguarda alguns segundos para o serviço subir
             setTimeout(async () => {
                 const isRunning = await this.ping();
                 if (isRunning) {
@@ -58,39 +54,6 @@ export class OllamaManager {
                     reject(new Error("O serviço do Ollama não respondeu após iniciar."));
                 }
             }, 3000);
-        });
-    }
-
-    /**
-     * Baixa e instala o Ollama no Windows (Nível Google: zero atrito)
-     */
-    static async installOllamaWindows(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            console.log(chalk.yellow('\n>>> Ollama não encontrado. Baixando o instalador oficial...'));
-            
-            const installerPath = path.join(os.tmpdir(), 'OllamaSetup.exe');
-            
-            // Usamos powershell para baixar o arquivo para não precisar de bibliotecas extras
-            const downloadCommand = `powershell -Command "Invoke-WebRequest -Uri 'https://ollama.com/download/OllamaSetup.exe' -OutFile '${installerPath}'"`;
-            
-            try {
-                execSync(downloadCommand, { stdio: 'inherit' });
-                console.log(chalk.green('>>> Download concluído. Iniciando instalação...'));
-                
-                // Roda o instalador. O usuário terá que passar pelas telas, mas já agilizamos tudo.
-                const installProcess = spawn(installerPath, [], { stdio: 'inherit', shell: true });
-                
-                installProcess.on('close', (code) => {
-                    if (code === 0) {
-                        console.log(chalk.green('>>> Instalação do Ollama concluída!'));
-                        resolve();
-                    } else {
-                        reject(new Error(`O instalador falhou com código ${code}`));
-                    }
-                });
-            } catch (error: any) {
-                reject(new Error(`Falha ao baixar ou instalar o Ollama: ${error.message}`));
-            }
         });
     }
 
@@ -110,30 +73,100 @@ export class OllamaManager {
     }
 
     /**
-     * Inicia o download de um modelo usando o binário local do Ollama para herdar a barra de progresso nativa.
+     * Auxiliar para desenhar a barra de progresso no terminal
+     */
+    private static drawProgressBar(modelName: string, completed: number, total: number, status: string) {
+        const width = 30;
+        const percent = total > 0 ? (completed / total) : 0;
+        const filled = Math.round(width * percent);
+        const empty = width - filled;
+        
+        const bar = '█'.repeat(filled) + '░'.repeat(empty);
+        const percentText = (percent * 100).toFixed(1).padStart(5, ' ');
+        
+        // Conversão simples para GB
+        const completedGB = (completed / 1024 / 1024 / 1024).toFixed(2);
+        const totalGB = (total / 1024 / 1024 / 1024).toFixed(2);
+        const sizeText = total > 0 ? `${completedGB}GB / ${totalGB}GB` : '';
+
+        // Limpa a linha atual e escreve por cima
+        readline.clearLine(process.stdout, 0);
+        readline.cursorTo(process.stdout, 0);
+        
+        process.stdout.write(
+            chalk.greenBright(`[Bob] `) + 
+            chalk.green(`Baixando ${modelName}: [${bar}] ${percentText}% ${sizeText ? `- ${sizeText}` : ''} | ${status}`)
+        );
+    }
+
+    /**
+     * Inicia o download de um modelo usando a API via HTTP nativo para criar uma Progress Bar Google-Level.
      */
     static pullModel(modelName: string): Promise<void> {
         return new Promise((resolve, reject) => {
-            console.log(chalk.yellow(`\n>>> Iniciando download automático do modelo: ${modelName}`));
-            console.log(chalk.gray(`>>> Isso pode demorar dependendo da sua conexão...`));
+            console.log(chalk.greenBright(`\n>>> Bob está solicitando o modelo ${modelName}...`));
             
-            const pullProcess = spawn('ollama', ['pull', modelName], {
-                stdio: 'inherit', // Isso joga a barra de progresso nativa do Ollama no terminal do Bob
-                shell: true
+            const data = JSON.stringify({ name: modelName });
+            
+            const req = http.request({
+                hostname: OLLAMA_HOST,
+                port: OLLAMA_PORT,
+                path: '/api/pull',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(data)
+                }
+            }, (res) => {
+                if (res.statusCode !== 200) {
+                    reject(new Error(`Ollama retornou erro: ${res.statusCode}`));
+                    return;
+                }
+
+                res.on('data', (chunk) => {
+                    // A API do Ollama manda chunks de JSON separados por quebra de linha.
+                    const lines = chunk.toString().split('\n');
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+                        try {
+                            const parsed = JSON.parse(line);
+                            if (parsed.status === 'success') {
+                                // Apaga a barra e mostra sucesso final
+                                readline.clearLine(process.stdout, 0);
+                                readline.cursorTo(process.stdout, 0);
+                                console.log(chalk.greenBright(`\n>>> Download e verificação do modelo ${modelName} concluídos com sucesso!`));
+                                resolve();
+                                return;
+                            }
+                            
+                            // Se tiver progresso, desenha a barra
+                            if (parsed.completed !== undefined && parsed.total !== undefined) {
+                                this.drawProgressBar(modelName, parsed.completed, parsed.total, parsed.status);
+                            } else {
+                                // Mensagens de status (ex: "pulling manifest") sem bytes
+                                readline.clearLine(process.stdout, 0);
+                                readline.cursorTo(process.stdout, 0);
+                                process.stdout.write(
+                                    chalk.greenBright(`[Bob] `) + chalk.green(`Baixando ${modelName}: ${parsed.status}`)
+                                );
+                            }
+                        } catch (e) {
+                            // ignora erros de parse caso o chunk quebre o json
+                        }
+                    }
+                });
+
+                res.on('end', () => {
+                    // Se fechar e não tiver mandado success, a gente ignora ou resolve
+                });
             });
 
-            pullProcess.on('close', (code) => {
-                if (code === 0) {
-                    console.log(chalk.green(`\n>>> Download do ${modelName} concluído com sucesso!`));
-                    resolve();
-                } else {
-                    reject(new Error(`O comando 'ollama pull' falhou com código ${code}`));
-                }
+            req.on('error', (e) => {
+                reject(e);
             });
-            
-            pullProcess.on('error', (err) => {
-                reject(err);
-            });
+
+            req.write(data);
+            req.end();
         });
     }
 }

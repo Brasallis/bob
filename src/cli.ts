@@ -41,24 +41,25 @@ async function checkOllamaSetup(model: string = 'llama3') {
     let isRunning = await OllamaManager.ping();
     
     if (!isRunning) {
-        spinner.warn(chalk.yellow('Ollama não está rodando. Verificando instalação...'));
+        spinner.stop();
         
         const isInstalled = OllamaManager.isInstalled();
         if (!isInstalled) {
-            console.log(chalk.red('>>> Ollama não está instalado no seu sistema.'));
-            // No Windows, tentamos baixar o instalador
-            try {
-                await OllamaManager.installOllamaWindows();
-                // Depois da instalação, avisa para rodar o comando novamente
-                console.log(chalk.green('>>> Por favor, reinicie seu terminal após a instalação e rode "bob" novamente.'));
-                process.exit(0);
-            } catch (err: any) {
-                console.log(chalk.red('Falha ao instalar automaticamente: ' + err.message));
-                console.log(chalk.gray('-> Para instalar manualmente: https://ollama.com/download'));
-                process.exit(1);
-            }
+            console.log(chalk.greenBright('┌──────────────────────────────────────────────────────────┐'));
+            console.log(chalk.greenBright('│                                                          │'));
+            console.log(chalk.greenBright('│ ') + chalk.whiteBright.bold(' OLLAMA NÃO ENCONTRADO ') + chalk.greenBright('                                  │'));
+            console.log(chalk.greenBright('│                                                          │'));
+            console.log(chalk.greenBright('│ ') + chalk.gray('Bob precisa do motor Ollama para processar a Matrix.') + chalk.greenBright('     │'));
+            console.log(chalk.greenBright('│                                                          │'));
+            console.log(chalk.greenBright('│ ') + chalk.green('1.') + chalk.white(' Acesse ') + chalk.cyan.underline('https://ollama.com/download') + chalk.greenBright('                    │'));
+            console.log(chalk.greenBright('│ ') + chalk.green('2.') + chalk.white(' Baixe e instale a versão para Windows.') + chalk.greenBright('                │'));
+            console.log(chalk.greenBright('│ ') + chalk.green('3.') + chalk.white(' Reinicie este terminal e digite ') + chalk.yellow('bob') + chalk.white(' novamente.') + chalk.greenBright('        │'));
+            console.log(chalk.greenBright('│                                                          │'));
+            console.log(chalk.greenBright('└──────────────────────────────────────────────────────────┘\n'));
+            process.exit(0);
         } else {
             // Está instalado mas não rodando
+            spinner.start(chalk.green('Iniciando o motor Ollama em background...'));
             try {
                 await OllamaManager.startOllama();
                 isRunning = true;
