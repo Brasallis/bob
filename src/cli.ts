@@ -123,6 +123,16 @@ program
             return;
         }
 
+        if (input.toLowerCase().startsWith('/model ')) {
+            const newModel = input.substring(7).trim();
+            if (newModel) {
+                orchestrator.model = newModel;
+                console.log(chalk.cyan(`>>> Motor de inferência alterado para: ${newModel}`));
+            }
+            rl.prompt();
+            return;
+        }
+
         if (input) {
             // Remove o prompt sujo
             readline.cursorTo(process.stdout, 0);
@@ -138,7 +148,7 @@ program
             console.log(chalk.green(response.text));
             
             console.log(chalk.gray(`\n[ Model: ${response.model} | Tokens: ${response.usage?.prompt_tokens || 0} in, ${response.usage?.completion_tokens || 0} out ]`));
-            console.log(chalk.gray(`[ Commands: /clear | /exit ]\n`));
+            console.log(chalk.gray(`[ Commands: /clear | /model <name> | /exit ]\n`));
         }
         rl.prompt();
     }).on('close', () => {
