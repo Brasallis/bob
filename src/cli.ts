@@ -104,10 +104,16 @@ program
 
     const rl = readline.createInterface({
         input: process.stdin,
-        output: process.stdout,
-        prompt: chalk.greenBright('bob> ')
+        output: process.stdout
     });
 
+    const updatePrompt = (model: string, tokensIn: number, tokensOut: number) => {
+        const footer = chalk.gray(`\n[ Model: ${model} | Tokens: ${tokensIn} in, ${tokensOut} out ]\n[ Commands: /clear | /model <name> | /exit ]\n`);
+        rl.setPrompt(footer + chalk.greenBright('bob> '));
+    };
+
+    // Initial prompt setup
+    updatePrompt('llama3', 0, 0);
     rl.prompt();
 
     rl.on('line', async (line) => {
@@ -128,6 +134,7 @@ program
             if (newModel) {
                 orchestrator.model = newModel;
                 console.log(chalk.cyan(`>>> Motor de inferência alterado para: ${newModel}`));
+                updatePrompt(newModel, 0, 0);
             }
             rl.prompt();
             return;
@@ -137,18 +144,23 @@ program
             // Remove o prompt sujo
             readline.cursorTo(process.stdout, 0);
             
-            const spin = ora({ text: chalk.green('Bob is thinking...'), color: 'green' }).start();
+            // Prefixo da resposta do Bob
+            process.stdout.write(chalk.greenBright('[Bob] '));
             
-            const response = await orchestrator.chat(input);
+            const response = await orchestrator.chat(input, (text) => {
+                // Imprime a chunk em tempo real
+                process.stdout.write(chalk.green(text));
+            });
             
-            spin.stop();
-            readline.clearLine(process.stdout, 0);
-            readline.cursorTo(process.stdout, 0);
+            // Pula uma linha no final da resposta
+            console.log();
 
-            console.log(chalk.green(response.text));
-            
-            console.log(chalk.gray(`\n[ Model: ${response.model} | Tokens: ${response.usage?.prompt_tokens || 0} in, ${response.usage?.completion_tokens || 0} out ]`));
-            console.log(chalk.gray(`[ Commands: /clear | /model <name> | /exit ]\n`));
+            // Atualiza o prompt fixo com os metadados reais
+            updatePrompt(
+                response.model, 
+                response.usage?.prompt_tokens || 0, 
+                response.usage?.completion_tokens || 0
+            );
         }
         rl.prompt();
     }).on('close', () => {

@@ -29,24 +29,49 @@ export class Agent {
         this.memory.push({ role: 'system', content: this.systemPrompt });
     }
 
-    async run(task: string): Promise<{text: string, usage?: any, model: string}> {
+    async run(task: string, onChunk?: (text: string) => void): Promise<{text: string, usage?: any, model: string}> {
         this.memory.push({ role: 'user', content: task });
         
         try {
-            const response = await this.client.chat.completions.create({
+            const stream = await this.client.chat.completions.create({
                 model: this.model,
                 messages: this.memory,
+                stream: true,
+                stream_options: { include_usage: true }
             });
 
-            const reply = response.choices[0]?.message?.content || "Sem resposta gerada.";
-            this.memory.push({ role: 'assistant', content: reply });
+            let fullReply = '';
+            let finalUsage: any = undefined;
+            let finalModel = this.model;
+
+            for await (const chunk of stream) {
+                const text = chunk.choices[0]?.delta?.content || "";
+                if (text) {
+                    fullReply += text;
+                    if (onChunk) onChunk(text);
+                }
+                
+                if (chunk.usage) {
+                    finalUsage = chunk.usage;
+                }
+                
+                if (chunk.model) {
+                    finalModel = chunk.model;
+                }
+            }
+
+            if (!fullReply) {
+                fullReply = "Sem resposta gerada.";
+            }
+
+            this.memory.push({ role: 'assistant', content: fullReply });
             return {
-                text: reply,
-                usage: response.usage,
-                model: response.model || this.model
+                text: fullReply,
+                usage: finalUsage,
+                model: finalModel
             };
         } catch (error: any) {
-            console.error(`[${this.name}] Erro ao comunicar com o modelo local (${this.model}): ${error.message}`);
+            console.error(`\n[${this.name}] Erro ao comunicar com o modelo local (${this.model}): ${error.message}`);
             return {
                 text: "Erro ao processar a tarefa.",
                 model: this.model

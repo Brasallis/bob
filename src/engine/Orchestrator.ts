@@ -10,7 +10,7 @@ Responda de maneira concisa, técnica e direta.`,
         });
     }
 
-    async chat(message: string): Promise<{text: string, usage?: any, model: string}> {
-        return await this.run(message);
+    async chat(message: string, onChunk?: (text: string) => void): Promise<{text: string, usage?: any, model: string}> {
+        return await this.run(message, onChunk);
     }
 }
